@@ -1,1 +1,3 @@
-# multithreaded-programming-in-c-cpp
+# Семинар 2
+
+Написать sleepsort на потоках C.
