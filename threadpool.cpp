@@ -10,6 +10,7 @@
 #include <functional>
 #include <exception>
 #include <future>
+#include <iomanip>
 
 class ThreadPool
 {
@@ -22,8 +23,7 @@ private:
     };
 
 public:
-    explicit ThreadPool( const size_t& N )
-        : state_(State::OK), count_active_(N)
+    explicit ThreadPool( const size_t& N ) : state_(State::OK), count_active_(N)
     {
         std::unique_lock<std::mutex> lock(mutex_);
         for( size_t i = 0; i < N; ++i )
@@ -43,32 +43,14 @@ public:
         }
     }
 
-    template<typename T>
-    std::future<std::result_of_t<T>> AddTask( T&& f )
+    bool AddTask( std::function<void()> f )
     {
-        using R = std::result_of_t<T>;
         std::unique_lock<std::mutex> lock(mutex_);
         if( state_ != State::OK )
-            return std::future<R>();
-
-        std::promise<R> prom;
-        std::future<R> res = prom.get_future();
-
-        tasks_.push_back(
-                    [f = std::move(f), p = std::move(prom)]() mutable
-                    {
-                        try
-                        {
-                            p.set_value(f());
-                        }
-                        catch(...)
-                        {
-                            p.set_exception(std::current_exception());
-                        };
-                    }
-                );
+            return false;
+        tasks_.push_back(f);
         cond_var_.notify_one();
-        return std::future<R>();
+        return true;
     }
 
     void Stop()
@@ -112,7 +94,7 @@ private:
             }
         }
 
-        count_active_--;
+        --count_active_;
         if( count_active_ == 0 )
             state_ = State::STOPPED;
     }
@@ -130,11 +112,11 @@ private:
 
 int main()
 {
-    ThreadPool p(23);
-
-    auto res = p.AddTask([]() -> int {return 2+3;});
-    if( !res.valid() ) {  /**/ }
-    res.wait();
-    res.get();
+    const size_t I = 8;
+    ThreadPool p(I);
+    for( size_t i = 0; i < I; ++i )
+    {
+        std::cout << i << ") " <<  std::boolalpha << p.AddTask([](){while(1) { 2 + 3 / 5 * 10;}}) << std::endl;
+    }
     return 0;
 }
